@@ -23,3 +23,13 @@ jobs:
 
     - name: Test jq installation
       run: jq --version
+
+    - name: Install packages
+      uses: ConorMacBride/install-package@v1
+      with:
+        brew: jq
+        apt: jq
+        choco: jq
+
+    - name: Test jq installation 2
+      run: jq --version
