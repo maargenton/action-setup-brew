@@ -1,0 +1,46 @@
+name: "Save Homebrew Cache"
+description: "Save Homebrew installation and all installed packages to cache"
+author: "glasswing-api"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Generate Homebrew state hash
+      shell: bash
+      run: |
+        # Create a hash based on installed packages and their versions
+        if command -v brew &> /dev/null; then
+
+          echo "Generating Homebrew state hash..."
+          brew --version > /tmp/brew-cache-state.txt
+          echo >> /tmp/brew-cache-state.txt
+          brew list --versions | sort >> /tmp/brew-cache-state.txt
+          BREW_STATE_HASH=$(cat /tmp/brew-cache-state.txt | sha256sum | cut -d' ' -f1)
+
+          # Check if state has changed by comparing with cached key
+          BREW_NEW_CACHE_KEY="brew-${{ runner.os }}-$BREW_STATE_HASH"
+          if [[ "${{ env.BREW_RESTORED_CACHE_KEY }}" == "$BREW_NEW_CACHE_KEY" ]]; then
+            echo "Homebrew state unchanged, skipping cache save"
+            echo "Previous key: ${{ env.BREW_RESTORED_CACHE_KEY }}"
+            echo "New key: $BREW_NEW_CACHE_KEY"
+          else
+            echo "Homebrew state changed, will save new cache for"
+            cat /tmp/brew-cache-state.txt
+            echo
+            echo "Previous key: ${{ env.BREW_RESTORED_CACHE_KEY }}"
+            echo "New key: $BREW_NEW_CACHE_KEY"
+            echo "BREW_NEW_CACHE_KEY=$BREW_NEW_CACHE_KEY" >> $GITHUB_ENV
+          fi
+        else
+          echo "Homebrew not found, skipping cache save"
+        fi
+
+    - name: Save Homebrew cache
+      if: env.BREW_NEW_CACHE_KEY != ''
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          /home/linuxbrew/.linuxbrew
+          /opt/homebrew
+          /usr/local/Homebrew
+        key: ${{ env.BREW_NEW_CACHE_KEY }}

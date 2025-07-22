@@ -1,0 +1,18 @@
+name: "Setup Homebrew"
+description: "Set up Homebrew on macOS or Linuxbrew on Linux with package caching"
+author: "maargenton"
+
+branding:
+  icon: "package"
+  color: "orange"
+
+inputs:
+  packages:
+    description: "Space or newline separated list of packages to install"
+    required: false
+    default: ""
+
+runs:
+  using: "node20"
+  main: "dist/index.js"
+  post: "dist/post/index.js"
