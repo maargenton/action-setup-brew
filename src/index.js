@@ -14,12 +14,17 @@ async function run() {
         const cacheRestored = await brew.restoreCache();
         if (cacheRestored) {
             await brew.setupEnv();
+            await brew.updateBrew();
         } else {
             const isBrewAvailable = await brew.checkAvailability();
             if (!isBrewAvailable) {
+                core.info('Installing Homebrew...');
                 await brew.installBrew();
+            } else {
+                core.info('Homebrew is already installed');
             }
             await brew.setupEnv();
+            await brew.updateBrew();
         }
 
         const packages = core.getInput('packages');
