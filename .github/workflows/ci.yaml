@@ -54,10 +54,9 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-      id: checkout
 
     - name: Test setup-brew action with jq
-      uses: maargenton/action-setup-brew@${{ steps.checkout.outputs.commit }}
+      uses: maargenton/action-setup-brew@${{ github.sha }}
       with:
         packages: jq
 
