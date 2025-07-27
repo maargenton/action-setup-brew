@@ -1,7 +1,6 @@
 const core = require('@actions/core');
 const os = require('os');
 const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
 const exec = require('@actions/exec');
 const brew = require('./brew');
