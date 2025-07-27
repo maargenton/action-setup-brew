@@ -3,6 +3,7 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const exec = require('@actions/exec');
 const brew = require('./brew');
 
 async function run() {
@@ -24,7 +25,7 @@ async function run() {
         core.info('Starting file scan for differential cache prototype...');
         const startTime = Date.now();
 
-        const fileMap = await scanFilesWithTimestamps(brewPaths);
+        const fileMap = await scanFiles(brewPaths);
         const scanDuration = Date.now() - startTime;
 
         const stableHash = generateStableHash(fileMap);
@@ -68,58 +69,67 @@ async function run() {
 }
 
 /**
- * Recursively scan directories and collect file/symlink info with timestamps
+ * Fast file scanning using native find + stat commands
  * @param {string[]} basePaths - Array of base paths to scan
  * @returns {Promise<Map<string, number>>} Map of filepath -> mtime timestamp
  */
-async function scanFilesWithTimestamps(basePaths) {
+async function scanFiles(basePaths) {
     const fileMap = new Map();
 
+    // Filter existing paths
+    const existingPaths = [];
     for (const basePath of basePaths) {
         try {
-            // Check if path exists
             await fs.promises.access(basePath);
-            await scanDirectory(basePath, fileMap);
-        } catch (error) {
-            core.info(`Skipping ${basePath}: ${error.message}`);
+            existingPaths.push(basePath);
+        } catch {
+            core.info(`Skipping non-existent path: ${basePath}`);
         }
+    }
+
+    if (existingPaths.length === 0) {
+        return fileMap;
+    }
+
+    let output = '';
+    const platform = os.platform();
+
+    // Platform-specific stat format options
+    const statFormatOpts = platform === 'darwin'
+        ? ['-f', '%N:%m']  // BSD stat format
+        : ['-c', '%n:%Y']; // GNU stat format
+
+    try {
+        await exec.exec('find', [
+            ...existingPaths,
+            '(', '-type', 'f', '-o', '-type', 'l', ')',
+            '-exec', 'stat', '-L', ...statFormatOpts, '{}', '+'
+        ], {
+            listeners: {
+                stdout: (data) => output += data.toString()
+            },
+            silent: true,
+            ignoreReturnCode: true
+        });
+
+        output.split('\n').forEach(line => {
+            if (line.trim()) {
+                const lastColon = line.lastIndexOf(':');
+                if (lastColon > 0) {
+                    const path = line.substring(0, lastColon);
+                    const timestamp = parseInt(line.substring(lastColon + 1)) * 1000; // Convert to ms
+                    if (!isNaN(timestamp)) {
+                        fileMap.set(path, timestamp);
+                    }
+                }
+            }
+        });
+
+    } catch (error) {
+        core.warning(`Fast scan failed: ${error.message}`);
     }
 
     return fileMap;
-}
-
-/**
- * Recursively scan a single directory
- * @param {string} dirPath - Directory to scan
- * @param {Map<string, number>} fileMap - Map to populate with results
- */
-async function scanDirectory(dirPath, fileMap) {
-    try {
-        const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
-
-        for (const entry of entries) {
-            const fullPath = path.join(dirPath, entry.name);
-
-            try {
-                const stats = await fs.promises.lstat(fullPath); // lstat to handle symlinks
-
-                if (entry.isFile() || entry.isSymbolicLink()) {
-                    // Store file or symlink with its mtime
-                    fileMap.set(fullPath, stats.mtimeMs);
-                } else if (entry.isDirectory()) {
-                    // Store directory with its mtime
-                    fileMap.set(fullPath, stats.mtimeMs);
-                    // Recursively scan subdirectory
-                    await scanDirectory(fullPath, fileMap);
-                }
-            } catch (error) {
-                // Skip files/dirs we can't access (permissions, broken symlinks, etc.)
-                core.debug(`Skipping ${fullPath}: ${error.message}`);
-            }
-        }
-    } catch (error) {
-        core.warning(`Failed to scan directory ${dirPath}: ${error.message}`);
-    }
 }
 
 /**
@@ -128,13 +138,10 @@ async function scanDirectory(dirPath, fileMap) {
  * @returns {string} Stable hash representing the file state
  */
 function generateStableHash(fileMap) {
-    // Return special hash for empty map
     if (fileMap.size === 0) {
         return '000000000000';
     }
 
-    // Convert map to sorted array of [path, timestamp] pairs for stability
-    // Use locale-independent comparison for deterministic sorting
     const sortedEntries = Array.from(fileMap.entries())
         .sort(([pathA], [pathB]) => {
             if (pathA < pathB) return -1;
@@ -142,12 +149,10 @@ function generateStableHash(fileMap) {
             return 0;
         });
 
-    // Create a string representation
     const content = sortedEntries
         .map(([path, timestamp]) => `${path}:${timestamp}`)
         .join('\n');
 
-    // Generate SHA-256 hash and truncate to 12 characters for readability
     const hash = crypto.createHash('sha256')
         .update(content)
         .digest('hex')
