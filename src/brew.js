@@ -54,9 +54,9 @@ async function stateHash() {
 
         const stateContent = versionOutput + '\n\n' +
             listOutput.split('\n').filter(line => line.trim()).sort().join('\n');
-        const hash = crypto.createHash('sha256').update(stateContent).digest('hex');
-
-        return hash;
+        const hash = crypto.createHash('sha256').update(stateContent)
+            .digest('hex').substring(0, 12);
+        return hash
 
     } catch (error) {
         core.warning(`Failed to generate brew state hash: ${error.message}`);
