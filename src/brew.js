@@ -8,7 +8,9 @@ const crypto = require('crypto');
 const CACHE_PATHS = [
     '/home/linuxbrew/.linuxbrew',
     '/opt/homebrew',
-    '/usr/local/Homebrew'
+    '/opt/homebrew/var/homebrew',
+    '/usr/local/Homebrew',
+    '/usr/local/var/homebrew',
 ];
 
 /**
