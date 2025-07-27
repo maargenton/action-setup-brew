@@ -146,6 +146,7 @@ async function setupEnv() {
                 core.addPath('/usr/local/bin');
                 core.addPath('/usr/local/sbin');
             } catch {
+                // /usr/local/bin doesn't exist, skip adding to PATH
             }
         }
 
@@ -163,6 +164,7 @@ async function setupEnv() {
             core.exportVariable('HOMEBREW_NO_INSTALL_CLEANUP', '1');
             core.exportVariable('HOMEBREW_NO_ANALYTICS', '1');
         } catch {
+            // Linuxbrew paths don't exist, skip adding to PATH
         }
     }
 }
