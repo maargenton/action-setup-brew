@@ -15,11 +15,7 @@ async function run() {
         }
 
         // Prototype: Test differential cache functions
-        const brewPaths = [
-            '/home/linuxbrew/.linuxbrew',
-            '/opt/homebrew',
-            '/usr/local'
-        ];
+        const brewPaths = await brewDirectories();
 
         core.info('Starting file scan for differential cache prototype...');
         const startTime = Date.now();
@@ -68,39 +64,90 @@ async function run() {
 }
 
 /**
+ * Get platform-specific Homebrew directories that actually contain brew-managed files
+ * @returns {Promise<string[]>} Array of directories to scan
+ */
+async function brewDirectories() {
+    const platform = os.platform();
+    const dirs = [];
+
+    if (platform === 'darwin') {
+        // Apple Silicon (M1/M2) - /opt/homebrew is brew-exclusive
+        if (await pathExists('/opt/homebrew')) {
+            dirs.push('/opt/homebrew');
+        }
+
+        // Intel Mac - only specific /usr/local dirs used by brew
+        if (await pathExists('/usr/local/Homebrew')) {
+            dirs.push(
+                '/usr/local/Homebrew',
+                '/usr/local/bin',
+                '/usr/local/sbin',
+                '/usr/local/lib',
+                '/usr/local/libexec',
+                '/usr/local/include',
+                '/usr/local/share',
+                '/usr/local/man',
+                '/usr/local/Cellar',
+                '/usr/local/Caskroom',
+                '/usr/local/var',
+                '/usr/local/etc',
+                '/usr/local/opt',
+                '/usr/local/Frameworks'
+            );
+        }
+    } else if (platform === 'linux') {
+        // Linux - /home/linuxbrew/.linuxbrew is brew-exclusive
+        if (await pathExists('/home/linuxbrew/.linuxbrew')) {
+            dirs.push('/home/linuxbrew/.linuxbrew');
+        }
+    }
+
+    // Filter to only existing directories
+    const existingDirs = [];
+    for (const dir of dirs) {
+        if (await pathExists(dir)) {
+            existingDirs.push(dir);
+        }
+    }
+
+    return existingDirs;
+}
+
+/**
+ * Check if a path exists
+ * @param {string} path - Path to check
+ * @returns {Promise<boolean>} True if path exists
+ */
+async function pathExists(path) {
+    try {
+        await fs.promises.access(path);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Fast file scanning using native find + stat commands
  * @param {string[]} basePaths - Array of base paths to scan
  * @returns {Promise<Map<string, number>>} Map of filepath -> mtime timestamp
  */
 async function scanFiles(basePaths) {
     const fileMap = new Map();
-
-    // Filter existing paths
-    const existingPaths = [];
-    for (const basePath of basePaths) {
-        try {
-            await fs.promises.access(basePath);
-            existingPaths.push(basePath);
-        } catch {
-            core.info(`Skipping non-existent path: ${basePath}`);
-        }
-    }
-
-    if (existingPaths.length === 0) {
+    if (basePaths.length === 0) {
         return fileMap;
     }
 
     let output = '';
     const platform = os.platform();
-
-    // Platform-specific stat format options
     const statFormatOpts = platform === 'darwin'
         ? ['-f', '%N:%m']  // BSD stat format
         : ['-c', '%n:%Y']; // GNU stat format
 
     try {
         await exec.exec('find', [
-            ...existingPaths,
+            ...basePaths,
             '(', '-type', 'f', '-o', '-type', 'l', ')',
             '-exec', 'stat', '-L', ...statFormatOpts, '{}', '+'
         ], {
