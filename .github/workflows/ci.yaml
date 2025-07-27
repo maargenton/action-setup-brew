@@ -79,7 +79,7 @@ jobs:
 
   test-windows:
     name: Windows Test
-    needs: build
+    needs: test
     runs-on: windows-latest
 
     steps:
