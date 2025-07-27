@@ -41,3 +41,39 @@ jobs:
         else
           echo "✅ dist/ folder is up to date"
         fi
+
+  test:
+    name: Integration Test
+    needs: build
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, macos-13, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      id: checkout
+
+    - name: Test setup-brew action with jq
+      uses: maargenton/action-setup-brew@${{ steps.checkout.outputs.commit }}
+      with:
+        packages: jq
+
+    - name: Install yq manually using brew
+      run: brew install --quiet yq
+
+    - name: Test versions
+      run: |
+        echo "=== Brew Version ==="
+        brew --version
+
+        echo "=== jq Version ==="
+        jq --version
+
+        echo "=== yq Version ==="
+        yq --version
+
+        echo "=== Brew List ==="
+        brew list --versions
