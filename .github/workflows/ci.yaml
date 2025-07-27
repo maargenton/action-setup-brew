@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Build Action
+    name: Build
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
@@ -37,9 +37,6 @@ jobs:
           echo ""
           echo "Changed files:"
           git status --porcelain dist/
-          echo ""
-          echo "Diff:"
-          git diff dist/
           exit 1
         else
           echo "✅ dist/ folder is up to date"
